@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: payment-service
+  logging:
+    level:
+      .web: DEBUG
+      com.rj.payment_service: DEBUG
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+stripe:
+  secret:
+    key: ${STRIPE_SECRET_KEY}
+    publishable: ${STRIPE_PUBLISHABLE_KEY}
