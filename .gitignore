@@ -19,6 +19,7 @@ target/
 *.iml
 *.ipr
 src/main/resources/secrets.properties
+/.augmentignore
 
 ### NetBeans ###
 /nbproject/private/
