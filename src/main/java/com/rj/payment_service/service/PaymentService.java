@@ -6,4 +6,6 @@ import com.stripe.model.PaymentIntent;
 public interface PaymentService {
 
     public PaymentIntent createPaymentIntent(Long amountInCents, String currency) throws StripeException;
+
+    public PaymentIntent confirmPayment(String paymentIntentId) throws StripeException;
 }
