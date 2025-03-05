@@ -4,7 +4,8 @@ import com.rj.payment_service.PaymentIntentDTO;
 import com.rj.payment_service.PaymentRequestDTO;
 import com.rj.payment_service.config.StripeProperties;
 import com.rj.payment_service.service.PaymentService;
-import com.stripe.Stripe;
+import com.rj.payment_service.service.StripeEventHandler;
+import com.rj.payment_service.service.StripeEventType;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Charge;
@@ -18,8 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api/v1/payments")
 @RequiredArgsConstructor
@@ -28,6 +27,7 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final StripeProperties stripeProperties;
+    private final StripeEventHandler eventHandler;
 
     @PostMapping("/webhook")
     public ResponseEntity<Void> handleStripeWebhook(
@@ -46,31 +46,24 @@ public class PaymentController {
             StripeObject stripeObject = event
                     .getDataObjectDeserializer()
                     .getObject()
-                    .orElseThrow(() -> new RuntimeException("Failed to get payment intent from event"));
+                    .orElseThrow(() -> new RuntimeException("Failed to deserialize stripe object"));
 
-            switch (event.getType()) {
-                case "payment_intent.succeeded":
-                    log.info("Payment succeeded");
-                    handlePaymentSucceeded((PaymentIntent) stripeObject);
-                    break;
-                case "payment_intent.payment_failed":
-                    log.info("Payment failed");
-                    handlePaymentFailed((PaymentIntent) stripeObject);
-                    break;
-                case "payment_intent.created":
-                    log.info("Payment intent created");
-                    handlePaymentCreated((PaymentIntent) stripeObject);
-                    break;
-                case "payment_intent.canceled":
-                    log.info("Payment intent canceled");
-                    handlePaymentCanceled((PaymentIntent) stripeObject);
-                    break;
-                case "charge.failed":
-                    log.info("Charge failed");
-                    handleChargeFailed((Charge) stripeObject);
-                    break;
-                default:
-                    log.info("Unhandled event type: {}", event.getType());
+            StripeEventType eventType = StripeEventType.fromStripeEventName(event.getType());
+
+            if (eventType == null) {
+                log.error("Unhandled event type: {}", event.getType());
+                eventHandler.handleUnknownEvent(event.getType(), stripeObject);
+                return ResponseEntity.ok().build();
+            }
+
+            switch (eventType) {
+                case PAYMENT_INTENT_SUCCEEDED ->
+                        eventHandler.handlePaymentIntentSucceeded((PaymentIntent) stripeObject);
+                case PAYMENT_INTENT_FAILED -> eventHandler.handlePaymentIntentFailed((PaymentIntent) stripeObject);
+                case PAYMENT_INTENT_CREATED -> eventHandler.handlePaymentIntentCreated((PaymentIntent) stripeObject);
+                case PAYMENT_INTENT_CANCELED -> eventHandler.handlePaymentIntentCanceled((PaymentIntent) stripeObject);
+                case CHARGE_FAILED -> eventHandler.handleChargeFailed((Charge) stripeObject);
+                case CHARGE_SUCCEEDED -> eventHandler.handleChargeSucceeded((Charge) stripeObject);
             }
         } catch (SignatureVerificationException e) {
             log.error("Invalid signature: {}", e.getMessage());
@@ -113,29 +106,5 @@ public class PaymentController {
         );
 
         return ResponseEntity.ok(response);
-    }
-
-    private void handlePaymentSucceeded(PaymentIntent paymentIntent) {
-        log.info("Payment succeeded: {}", paymentIntent.getId());
-        // Implement your business logic here
-        // For example: update order status, send confirmation email, etc.
-    }
-
-    private void handlePaymentFailed(PaymentIntent paymentIntent) {
-        log.info("Payment failed: {}", paymentIntent.getId());
-        // Implement your failure handling logic here
-        // For example: update order status, notify customer, etc.
-    }
-
-    private void handlePaymentCreated(PaymentIntent paymentIntent) {
-        log.info("Payment intent created: {}", paymentIntent.getId());
-    }
-
-    private void handlePaymentCanceled(PaymentIntent paymentIntent) {
-        log.info("Payment intent canceled: {}", paymentIntent.getId());
-    }
-
-    private void handleChargeFailed(Charge charge) {
-        log.info("Charge failed: {}", charge.getId());
     }
 }
