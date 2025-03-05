@@ -14,13 +14,19 @@ import org.springframework.validation.annotation.Validated;
 public class StripeProperties {
 
     private String secretKey;
+    private String publishableKey;
+    private String webhookSecret;
 
     public StripeProperties() {
         log.info("StripeProperties bean created.");
     }
 
-    public void setSecretKey(String secretKey) {
+    public void setSecretKey(String secretKey,
+                             String publishableKey,
+                             String webhookSecret) {
         this.secretKey = secretKey;
+        this.publishableKey = publishableKey;
+        this.webhookSecret = webhookSecret;
         log.info("Stripe secret key set in StripeProperties: {}", secretKey != null ? "***SET***" : "null");
     }
 
