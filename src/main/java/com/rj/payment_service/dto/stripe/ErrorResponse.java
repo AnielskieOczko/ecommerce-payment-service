@@ -1,4 +1,4 @@
-package com.rj.payment_service;
+package com.rj.payment_service.dto.stripe;
 
 import lombok.Builder;
 

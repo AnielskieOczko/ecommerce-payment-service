@@ -4,7 +4,7 @@ import com.stripe.model.Charge;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.StripeObject;
 
-public interface StripeEventHandler {
+public interface StripeWebHook {
     void handlePaymentIntentCreated(PaymentIntent paymentIntent);
     void handlePaymentIntentSucceeded(PaymentIntent paymentIntent);
     void handlePaymentIntentFailed(PaymentIntent paymentIntent);

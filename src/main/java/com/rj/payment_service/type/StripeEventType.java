@@ -1,9 +1,11 @@
-package com.rj.payment_service.service;
+package com.rj.payment_service.type;
 
 import com.stripe.model.Charge;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.StripeObject;
+import lombok.Getter;
 
+@Getter
 public enum StripeEventType {
     PAYMENT_INTENT_CREATED("payment_intent.created", PaymentIntent.class),
     PAYMENT_INTENT_SUCCEEDED("payment_intent.succeeded", PaymentIntent.class),
@@ -20,14 +22,6 @@ public enum StripeEventType {
     StripeEventType(String eventName, Class<? extends StripeObject> eventClass) {
         this.eventName = eventName;
         this.eventClass = eventClass;
-    }
-
-    public String getEventName() {
-        return eventName;
-    }
-
-    public Class<? extends StripeObject> getEventClass() {
-        return eventClass;
     }
 
     public static StripeEventType fromStripeEventName(String eventName) {

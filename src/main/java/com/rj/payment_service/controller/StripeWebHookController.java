@@ -1,11 +1,11 @@
 package com.rj.payment_service.controller;
 
-import com.rj.payment_service.PaymentIntentDTO;
-import com.rj.payment_service.PaymentRequestDTO;
-import com.rj.payment_service.config.StripeProperties;
+import com.rj.payment_service.dto.request.PaymentIntentRequestDTO;
+import com.rj.payment_service.dto.stripe.StripePaymentIntentDTO;
+import com.rj.payment_service.config.WebSecurityConfig;
 import com.rj.payment_service.service.PaymentService;
-import com.rj.payment_service.service.StripeEventHandler;
-import com.rj.payment_service.service.StripeEventType;
+import com.rj.payment_service.service.StripeWebHook;
+import com.rj.payment_service.type.StripeEventType;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Charge;
@@ -23,11 +23,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/payments")
 @RequiredArgsConstructor
 @Slf4j
-public class PaymentController {
+public class StripeWebHookController {
 
     private final PaymentService paymentService;
-    private final StripeProperties stripeProperties;
-    private final StripeEventHandler eventHandler;
+    private final WebSecurityConfig stripeProperties;
+    private final StripeWebHook eventHandler;
 
     @PostMapping("/webhook")
     public ResponseEntity<Void> handleStripeWebhook(
@@ -78,32 +78,29 @@ public class PaymentController {
 
 
     @PostMapping("/payment-intent")
-    public ResponseEntity<PaymentIntentDTO> createPaymentIntent(@RequestBody PaymentRequestDTO request) throws StripeException {
-        PaymentIntent intent = paymentService.createPaymentIntent(
-                request.amountInCents(),
-                request.currency()
-        );
+    public ResponseEntity<StripePaymentIntentDTO> createPaymentIntent(@RequestBody PaymentIntentRequestDTO request) throws StripeException {
+        PaymentIntent intent = paymentService.createPaymentIntent(request);
 
-        PaymentIntentDTO response = new PaymentIntentDTO(
-                intent.getId(),
-                intent.getClientSecret(),
-                intent.getAmount(),
-                intent.getCurrency()
-        );
+        StripePaymentIntentDTO response = StripePaymentIntentDTO.builder()
+                .id(intent.getId())
+                .clientSecret(intent.getClientSecret())
+                .amount(intent.getAmount())
+                .currency(intent.getCurrency())
+                .build();
 
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/confirm/{paymentIntentId}")
-    public ResponseEntity<PaymentIntentDTO> confirmPayment(@PathVariable String paymentIntentId) throws StripeException {
+    public ResponseEntity<StripePaymentIntentDTO> confirmPayment(@PathVariable String paymentIntentId) throws StripeException {
         PaymentIntent confirmedIntent = paymentService.confirmPayment(paymentIntentId);
 
-        PaymentIntentDTO response = new PaymentIntentDTO(
-                confirmedIntent.getId(),
-                confirmedIntent.getClientSecret(),
-                confirmedIntent.getAmount(),
-                confirmedIntent.getCurrency()
-        );
+        StripePaymentIntentDTO response = StripePaymentIntentDTO.builder()
+                .id(confirmedIntent.getId())
+                .clientSecret(confirmedIntent.getClientSecret())
+                .amount(confirmedIntent.getAmount())
+                .currency(confirmedIntent.getCurrency())
+                .build();
 
         return ResponseEntity.ok(response);
     }
