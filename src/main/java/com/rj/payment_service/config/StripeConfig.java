@@ -11,12 +11,12 @@ import org.springframework.web.client.RestTemplate;
 
 @Configuration
 @Slf4j
-@EnableConfigurationProperties(StripeProperties.class)
+@EnableConfigurationProperties(WebSecurityConfig.class)
 public class StripeConfig {
 
-    private final StripeProperties stripeProperties;
+    private final WebSecurityConfig stripeProperties;
 
-    StripeConfig(StripeProperties stripeProperties) {
+    StripeConfig(WebSecurityConfig stripeProperties) {
         this.stripeProperties = stripeProperties;
         log.info("StripeConfig constructor called.  Secret Key from properties: {}", stripeProperties.getSecretKey() != null ? "***SET***" : "null");
         Stripe.apiKey = stripeProperties.getSecretKey();
