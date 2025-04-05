@@ -8,7 +8,7 @@ import java.util.Map;
 @Builder
 public record StripeEventDTO(
         String id,
-        String type, // payment_intent.succeeded, payment_intent.failed, etc.
+        String type,
         Map<String, Object> data,
         LocalDateTime created
 ) {

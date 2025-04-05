@@ -1,6 +1,5 @@
 package com.rj.payment_service.producer;
 
-import com.rj.payment_service.config.RabbitMQConfig;
 import com.rj.payment_service.exception.MessagePublishException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,19 +34,10 @@ public class RabbitMQProducer {
 
     }
 
-    public <T> void sendPaymentResponse(T response, String correlationId) {
+    public <T> void sendCheckoutSessionResponse(T response, String correlationId) {
         sendMessage(
-                PAYMENT_RESPONSE_EXCHANGE,
-                PAYMENT_RESPONSE_ROUTING_KEY,
-                response,
-                correlationId
-        );
-    }
-
-    public <T> void sendVerificationResponse(T response, String correlationId) {
-        sendMessage(
-                VERIFICATION_RESPONSE_EXCHANGE,
-                VERIFICATION_RESPONSE_ROUTING_KEY,
+                CHECKOUT_SESSION_RESPONSE_EXCHANGE,
+                CHECKOUT_SESSION_RESPONSE_ROUTING_KEY,
                 response,
                 correlationId
         );
