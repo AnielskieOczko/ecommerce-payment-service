@@ -2,6 +2,7 @@ package com.rj.payment_service.service;
 
 import com.rj.payment_service.dto.request.CheckoutSessionRequestDTO;
 import com.rj.payment_service.exception.PaymentProcessingException;
+import com.rj.payment_service.type.Currency;
 import com.stripe.exception.StripeException;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.checkout.SessionCreateParams;
@@ -23,45 +24,11 @@ public class StripePaymentServiceImpl implements PaymentService {
         log.info("Creating checkout session for order: {}", request.orderId());
 
         try {
-            // Validate request
-            if (request.orderId() == null || request.orderId().trim().isEmpty()) {
-                throw new IllegalArgumentException("Order ID is required");
-            }
-            if (request.customerEmail() == null || !isValidEmail(request.customerEmail())) {
-                throw new IllegalArgumentException("Valid customer email is required");
-            }
-            if (request.successUrl() == null || request.successUrl().trim().isEmpty()) {
-                throw new IllegalArgumentException("Success URL is required");
-            }
-            if (request.cancelUrl() == null || request.cancelUrl().trim().isEmpty()) {
-                throw new IllegalArgumentException("Cancel URL is required");
-            }
-            if (request.lineItems() == null || request.lineItems().isEmpty()) {
-                throw new IllegalArgumentException("At least one line item is required");
-            }
+            // Validate and prepare the request
+            validateRequest(request);
 
-            // Create line items for the session
-            List<SessionCreateParams.LineItem> lineItems = new ArrayList<>();
-
-            for (CheckoutSessionRequestDTO.CheckoutLineItemDTO item : request.lineItems()) {
-                lineItems.add(
-                        SessionCreateParams.LineItem.builder()
-                                .setQuantity(Long.valueOf(item.quantity()))
-                                .setPriceData(
-                                        SessionCreateParams.LineItem.PriceData.builder()
-                                                .setCurrency(item.currency().toLowerCase())
-                                                .setUnitAmount(item.unitAmount())
-                                                .setProductData(
-                                                        SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                                                                .setName(item.name())
-                                                                .setDescription(item.description())
-                                                                .build()
-                                                )
-                                                .build()
-                                )
-                                .build()
-                );
-            }
+            // Prepare line items
+            List<SessionCreateParams.LineItem> lineItems = getLineItems(request);
 
             // Build the session parameters
             SessionCreateParams.Builder paramsBuilder = SessionCreateParams.builder()
@@ -70,6 +37,11 @@ public class StripePaymentServiceImpl implements PaymentService {
                     .setSuccessUrl(request.successUrl())
                     .setCancelUrl(request.cancelUrl())
                     .addAllLineItem(lineItems)
+                    .setPaymentIntentData(
+                            SessionCreateParams.PaymentIntentData.builder()
+                                    .putMetadata("orderId", request.orderId())
+                                    .build()
+                    )
                     .putMetadata("orderId", request.orderId());
 
             // Add any additional metadata
@@ -77,9 +49,12 @@ public class StripePaymentServiceImpl implements PaymentService {
                 request.metadata().forEach(paramsBuilder::putMetadata);
             }
 
-            // Create the session
+//            Create the session
+//            Makes the API call to Stripe: Session.create(paramsBuilder.build())
+//            This is where the actual communication with Stripe happens
+//            Returns a Session object with ID, URL, and other details
             Session session = Session.create(paramsBuilder.build());
-
+            log.info("Checkout URL: {}", session.getUrl());
             log.info("Created checkout session: {} for order: {}", session.getId(), request.orderId());
             return session;
         } catch (StripeException e) {
@@ -88,8 +63,60 @@ public class StripePaymentServiceImpl implements PaymentService {
         }
     }
 
+    private List<SessionCreateParams.LineItem> getLineItems(CheckoutSessionRequestDTO request) {
+        // Create line items for the session
+        List<SessionCreateParams.LineItem> lineItems = new ArrayList<>();
+
+        for (CheckoutSessionRequestDTO.CheckoutLineItemDTO item : request.lineItems()) {
+            lineItems.add(
+                    SessionCreateParams.LineItem.builder()
+                            .setQuantity(Long.valueOf(item.quantity()))
+                            .setPriceData(
+                                    SessionCreateParams.LineItem.PriceData.builder()
+                                            .setCurrency(item.currency().toLowerCase())
+                                            .setUnitAmount(convertToSmallestCurrencyUnit(item.unitAmount(), item.currency()))
+                                            .setProductData(
+                                                    SessionCreateParams.LineItem.PriceData.ProductData.builder()
+                                                            .setName(item.name())
+                                                            .setDescription(item.description())
+                                                            .build()
+                                            )
+                                            .build()
+                            )
+                            .build()
+            );
+        }
+        return lineItems;
+    }
+
     private boolean isValidEmail(String email) {
         // Basic email validation - you might want to use a more robust solution
         return email != null && email.matches("^[A-Za-z0-9+_.-]+@(.+)$");
+    }
+
+    private Long convertToSmallestCurrencyUnit(Long amount, String currency) {
+        Currency currencyEnum = Currency.fromCode(currency);
+        return switch (currencyEnum) {
+            case USD, EUR, PLN -> amount * 100;
+        };
+    }
+
+    private void validateRequest(CheckoutSessionRequestDTO request) {
+        // Validate request
+        if (request.orderId() == null || request.orderId().trim().isEmpty()) {
+            throw new IllegalArgumentException("Order ID is required");
+        }
+        if (request.customerEmail() == null || !isValidEmail(request.customerEmail())) {
+            throw new IllegalArgumentException("Valid customer email is required");
+        }
+        if (request.successUrl() == null || request.successUrl().trim().isEmpty()) {
+            throw new IllegalArgumentException("Success URL is required");
+        }
+        if (request.cancelUrl() == null || request.cancelUrl().trim().isEmpty()) {
+            throw new IllegalArgumentException("Cancel URL is required");
+        }
+        if (request.lineItems() == null || request.lineItems().isEmpty()) {
+            throw new IllegalArgumentException("At least one line item is required");
+        }
     }
 }

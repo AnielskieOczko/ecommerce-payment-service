@@ -2,6 +2,8 @@ package com.rj.payment_service.service;
 
 import com.rj.payment_service.dto.response.CheckoutSessionResponseDTO;
 import com.rj.payment_service.producer.RabbitMQProducer;
+import com.rj.payment_service.type.PaymentStatus;
+import com.stripe.model.Charge;
 import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
 import lombok.RequiredArgsConstructor;
@@ -19,20 +21,51 @@ public class StripeEventWebHookImpl implements StripeWebHook {
 
     private final RabbitMQProducer rabbitMQProducer;
 
+
+    @Override
+    public void handleChargeSucceeded(Charge charge) {
+        log.info("Processing event: charge succeeded: {}", charge.getId());
+        
+        String orderId = charge.getMetadata().get("orderId");
+        
+        Map<String, String> additionalDetails = new HashMap<>();
+        additionalDetails.put("receiptUrl", charge.getReceiptUrl());
+        additionalDetails.put("paymentMethodType", charge.getPaymentMethodDetails().getType());
+
+        PaymentStatus chargeStatus = PaymentStatus.fromChargeStatus(charge.getStatus());
+        
+        CheckoutSessionResponseDTO checkoutSessionResponseDTO = CheckoutSessionResponseDTO.builder()
+                .orderId(orderId)
+                // For charge events, we only care about payment status
+                .paymentStatus(chargeStatus)
+                .currency(charge.getCurrency())
+                .amountTotal(charge.getAmount())
+                .customerEmail(charge.getBillingDetails().getEmail())
+                .processedAt(LocalDateTime.now())
+                .additionalDetails(additionalDetails)
+                .build();
+        
+        rabbitMQProducer.sendCheckoutSessionResponse(checkoutSessionResponseDTO, charge.getId());
+        
+        log.info("Charge succeeded for order: {}", orderId);
+    }
+
     @Override
     public void handleCheckoutSessionCompleted(Session session) {
         log.info("Processing event: checkout session completed: {}", session.getId());
 
         String orderId = session.getMetadata().get("orderId");
-        // Create any additional details that don't fit in the main fields
         Map<String, String> additionalDetails = new HashMap<>();
 
-        CheckoutSessionResponseDTO verificationResponse = CheckoutSessionResponseDTO.builder()
+        PaymentStatus sessionStatus = PaymentStatus.fromCheckoutSessionStatus(session.getStatus());
+        PaymentStatus paymentStatus = PaymentStatus.fromCheckoutSessionPaymentStatus(session.getPaymentStatus());
+
+        CheckoutSessionResponseDTO checkoutSessionResponseDTO = CheckoutSessionResponseDTO.builder()
                 .sessionId(session.getId())
                 .orderId(orderId)
-                .status("CHECKOUT_COMPLETED")
-                .paymentStatus(session.getPaymentStatus())
-                .checkoutUrl(session.getUrl())
+                // For completed sessions, we always include both statuses
+                .sessionStatus(sessionStatus)
+                .paymentStatus(paymentStatus)
                 .currency(session.getCurrency())
                 .amountTotal(session.getAmountTotal())
                 .customerEmail(session.getCustomerEmail())
@@ -40,8 +73,7 @@ public class StripeEventWebHookImpl implements StripeWebHook {
                 .additionalDetails(additionalDetails)
                 .build();
 
-        // Send verification response to queue
-        rabbitMQProducer.sendCheckoutSessionResponse(verificationResponse, session.getId());
+        rabbitMQProducer.sendCheckoutSessionResponse(checkoutSessionResponseDTO, session.getId());
 
         log.info("Checkout session completed for order: {}", orderId);
     }
@@ -51,22 +83,21 @@ public class StripeEventWebHookImpl implements StripeWebHook {
         log.info("Processing event: checkout session expired: {}", session.getId());
 
         String orderId = session.getMetadata().get("orderId");
+        PaymentStatus sessionStatus = PaymentStatus.fromCheckoutSessionStatus(session.getStatus());
+        PaymentStatus paymentStatus = PaymentStatus.fromCheckoutSessionPaymentStatus(session.getPaymentStatus());
 
-        // Calculate expiration time if available
         LocalDateTime expiresAt = session.getExpiresAt() != null ?
                 LocalDateTime.ofEpochSecond(session.getExpiresAt(), 0, java.time.ZoneOffset.UTC) :
                 null;
 
-        // Create any additional details that don't fit in the main fields
         Map<String, String> additionalDetails = new HashMap<>();
-        // Add any other details you might need
 
-        CheckoutSessionResponseDTO verificationResponse = CheckoutSessionResponseDTO.builder()
+        CheckoutSessionResponseDTO checkoutSessionResponseDTO = CheckoutSessionResponseDTO.builder()
                 .sessionId(session.getId())
                 .orderId(orderId)
-                .status("CHECKOUT_EXPIRED")
-                .paymentStatus(session.getPaymentStatus())
-                .checkoutUrl(session.getUrl())
+                // For expired sessions, we always include both statuses
+                .sessionStatus(sessionStatus)
+                .paymentStatus(paymentStatus)
                 .currency(session.getCurrency())
                 .amountTotal(session.getAmountTotal())
                 .customerEmail(session.getCustomerEmail())
@@ -75,8 +106,7 @@ public class StripeEventWebHookImpl implements StripeWebHook {
                 .additionalDetails(additionalDetails)
                 .build();
 
-        // Send verification response to queue
-        rabbitMQProducer.sendCheckoutSessionResponse(verificationResponse, session.getId());
+        rabbitMQProducer.sendCheckoutSessionResponse(checkoutSessionResponseDTO, session.getId());
 
         log.warn("Checkout session expired for order: {}", orderId);
     }
@@ -84,24 +114,6 @@ public class StripeEventWebHookImpl implements StripeWebHook {
     @Override
     public void handleUnknownEvent(String eventType, StripeObject object) {
         log.info("Unhandled event type: {} with object: {}", eventType, object);
-
-        // Create a generic verification response for unknown events
-        Map<String, String> additionalDetails = new HashMap<>();
-        additionalDetails.put("eventType", eventType);
-        additionalDetails.put("objectType", object.getClass().getSimpleName());
-
-        CheckoutSessionResponseDTO verificationResponse = CheckoutSessionResponseDTO.builder()
-                .status("UNKNOWN_EVENT")
-                .processedAt(LocalDateTime.now())
-                .additionalDetails(additionalDetails)
-                .build();
-
-        // Generate a correlation ID for the unknown event
-        String correlationId = "unknown-" + System.currentTimeMillis();
-
-        // Send verification response to queue
-        rabbitMQProducer.sendCheckoutSessionResponse(verificationResponse, correlationId);
-
         log.warn("Processed unknown Stripe event type: {}", eventType);
     }
 }

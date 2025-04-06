@@ -1,5 +1,6 @@
 package com.rj.payment_service.dto.response;
 
+import com.rj.payment_service.type.PaymentStatus;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
@@ -16,8 +17,8 @@ public record CheckoutSessionResponseDTO(
         String orderId,             // Your system's order ID
 
         // Session status information
-        String status,              // Overall status (CHECKOUT_COMPLETED, CHECKOUT_EXPIRED, etc.)
-        String paymentStatus,       // Stripe's payment status (paid, unpaid, etc.)
+        PaymentStatus sessionStatus,     // Session status (OPEN, COMPLETE, EXPIRED)
+        PaymentStatus paymentStatus,     // Payment status (PAID, UNPAID, NO_PAYMENT_REQUIRED)
 
         // URLs
         String checkoutUrl,         // URL for the checkout page

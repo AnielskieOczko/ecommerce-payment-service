@@ -4,6 +4,7 @@ import com.rj.payment_service.dto.request.CheckoutSessionRequestDTO;
 import com.rj.payment_service.dto.response.CheckoutSessionResponseDTO;
 import com.rj.payment_service.producer.RabbitMQProducer;
 import com.rj.payment_service.service.PaymentService;
+import com.rj.payment_service.type.PaymentStatus;
 import com.stripe.exception.StripeException;
 import com.stripe.model.checkout.Session;
 import lombok.RequiredArgsConstructor;
@@ -37,12 +38,15 @@ public class CheckoutSessionListener {
             // Create the checkout session
             Session session = paymentService.createCheckoutSession(request);
 
+            PaymentStatus sessionStatus = PaymentStatus.fromCheckoutSessionStatus(session.getStatus());
+            PaymentStatus paymentStatus = PaymentStatus.fromCheckoutSessionPaymentStatus(session.getPaymentStatus());
+
             // Build the response
             CheckoutSessionResponseDTO response = CheckoutSessionResponseDTO.builder()
                     .sessionId(session.getId())
                     .orderId(request.orderId())
-                    .status(session.getStatus())
-                    .paymentStatus(session.getPaymentStatus())
+                    .sessionStatus(sessionStatus)
+                    .paymentStatus(paymentStatus)
                     .checkoutUrl(session.getUrl())
                     .currency(session.getCurrency())
                     .amountTotal(session.getAmountTotal())
@@ -66,7 +70,8 @@ public class CheckoutSessionListener {
             // Send error response
             CheckoutSessionResponseDTO errorResponse = CheckoutSessionResponseDTO.builder()
                     .orderId(request.orderId())
-                    .status("ERROR")
+                    .sessionStatus(PaymentStatus.UNKNOWN)
+                    .paymentStatus(PaymentStatus.UNKNOWN)
                     .processedAt(LocalDateTime.now())
                     .build();
 
@@ -78,7 +83,7 @@ public class CheckoutSessionListener {
             // Send error response for unexpected errors
             CheckoutSessionResponseDTO errorResponse = CheckoutSessionResponseDTO.builder()
                     .orderId(request.orderId())
-                    .status("INTERNAL_ERROR")
+                    .sessionStatus(PaymentStatus.UNKNOWN)
                     .processedAt(LocalDateTime.now())
                     .build();
 

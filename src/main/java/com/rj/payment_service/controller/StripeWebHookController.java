@@ -5,6 +5,7 @@ import com.rj.payment_service.service.PaymentService;
 import com.rj.payment_service.service.StripeWebHook;
 import com.rj.payment_service.type.StripeEventType;
 import com.stripe.exception.SignatureVerificationException;
+import com.stripe.model.Charge;
 import com.stripe.model.Event;
 import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
@@ -28,8 +29,17 @@ public class StripeWebHookController {
     @PostMapping("/webhook")
     public ResponseEntity<Void> handleStripeWebhook(
             @RequestBody String payload,
-            @RequestHeader("Stripe-Signature") String signature
+            @RequestHeader(value = "Stripe-Signature", required = false) String signature
     ) throws SignatureVerificationException {
+        log.info("=== Webhook Request Received ===");
+        log.info("Signature header present: {}", signature != null);
+        log.info("Webhook secret configured: {}", stripeProperties.getWebhookSecret() != null);
+        log.debug("Payload: {}", payload);
+
+        if (signature == null) {
+            log.error("No Stripe signature found in request");
+            return ResponseEntity.badRequest().build();
+        }
 
         try {
             Event event = Webhook.constructEvent(
@@ -37,8 +47,10 @@ public class StripeWebHookController {
                     signature,
                     stripeProperties.getWebhookSecret()
             );
-
-            log.info("Received webhook event: {}", event.getType());
+            
+            log.info("Successfully constructed webhook event: {} with id: {}", 
+                    event.getType(), event.getId());
+            
             StripeObject stripeObject = event
                     .getDataObjectDeserializer()
                     .getObject()
@@ -55,15 +67,15 @@ public class StripeWebHookController {
             switch (eventType) {
                 case CHECKOUT_SESSION_COMPLETED -> eventHandler.handleCheckoutSessionCompleted((Session) stripeObject);
                 case CHECKOUT_SESSION_EXPIRED -> eventHandler.handleCheckoutSessionExpired((Session) stripeObject);
+                case CHARGE_SUCCEEDED -> eventHandler.handleChargeSucceeded((Charge) stripeObject);
             }
         } catch (SignatureVerificationException e) {
-            log.error("Invalid signature: {}", e.getMessage());
+            log.error("Invalid signature for webhook request: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         } catch (Exception e) {
-            log.error("Unexpected error: {}", e.getMessage());
+            log.error("Error processing webhook: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        log.info("Webhook handled successfully");
         return ResponseEntity.ok().build();
     }
 
