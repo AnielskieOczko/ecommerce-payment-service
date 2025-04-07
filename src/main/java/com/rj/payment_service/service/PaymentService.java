@@ -1,9 +1,10 @@
 package com.rj.payment_service.service;
 
+import com.rj.payment_service.dto.request.CheckoutSessionRequestDTO;
 import com.stripe.exception.StripeException;
-import com.stripe.model.PaymentIntent;
+import com.stripe.model.checkout.Session;
 
 public interface PaymentService {
 
-    public PaymentIntent createPaymentIntent(Long amountInCents, String currency) throws StripeException;
+    Session createCheckoutSession(CheckoutSessionRequestDTO request) throws StripeException;
 }
