@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,12 +24,14 @@ public class StripePaymentServiceImpl implements PaymentService {
     public Session createCheckoutSession(CheckoutSessionRequestDTO request) throws StripeException {
         log.info("Creating checkout session for order: {}", request.orderId());
 
+        Long thirtyMinutesFromNow = LocalDateTime.now().toEpochSecond(java.time.ZoneOffset.UTC) + (30 * 60);
+
         try {
             // Validate and prepare the request
             validateRequest(request);
 
             // Prepare line items
-            List<SessionCreateParams.LineItem> lineItems = getLineItems(request);
+            List<SessionCreateParams.LineItem> lineItems = buildStripeLineItemsFromRequest(request);
 
             // Build the session parameters
             SessionCreateParams.Builder paramsBuilder = SessionCreateParams.builder()
@@ -37,6 +40,7 @@ public class StripePaymentServiceImpl implements PaymentService {
                     .setSuccessUrl(request.successUrl())
                     .setCancelUrl(request.cancelUrl())
                     .addAllLineItem(lineItems)
+                    .setExpiresAt(thirtyMinutesFromNow)
                     .setPaymentIntentData(
                             SessionCreateParams.PaymentIntentData.builder()
                                     .putMetadata("orderId", request.orderId())
@@ -63,7 +67,7 @@ public class StripePaymentServiceImpl implements PaymentService {
         }
     }
 
-    private List<SessionCreateParams.LineItem> getLineItems(CheckoutSessionRequestDTO request) {
+    private List<SessionCreateParams.LineItem> buildStripeLineItemsFromRequest(CheckoutSessionRequestDTO request) {
         // Create line items for the session
         List<SessionCreateParams.LineItem> lineItems = new ArrayList<>();
 
