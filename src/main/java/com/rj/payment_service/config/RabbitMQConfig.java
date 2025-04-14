@@ -1,15 +1,23 @@
 package com.rj.payment_service.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Configuration
 @Slf4j
@@ -67,7 +75,7 @@ public class RabbitMQConfig {
                 .with(CHECKOUT_SESSION_RESPONSE_ROUTING_KEY);
     }
 
-    
+
     @Bean
     public TopicExchange deadLetterExchange() {
         return new TopicExchange(DLQ_EXCHANGE, true, false);
@@ -86,8 +94,56 @@ public class RabbitMQConfig {
                 .with(DLQ_ROUTING_KEY);
     }
 
+    // Define the ObjectMapper bean here too for consistency
     @Bean
-    public MessageConverter jsonMessageConverter(ObjectMapper objectMapper) {
-        return new Jackson2JsonMessageConverter(objectMapper);
+    public ObjectMapper rabbitObjectMapper() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        objectMapper.activateDefaultTyping(
+                LaissezFaireSubTypeValidator.instance,
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+
+        return objectMapper;
     }
+
+    @Bean
+    MessageConverter jsonMessageConverter(ObjectMapper rabbitObjectMapper) {
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter(rabbitObjectMapper);
+        DefaultJackson2JavaTypeMapper typeMapper = new DefaultJackson2JavaTypeMapper();
+        Map<String, Class<?>> idClassMapping = new HashMap<>();
+
+        final String PRODUCER_DTO_CLASS = "com.rj.ecommerce_backend.messaging.payment.dto.CheckoutSessionRequestDTO";
+
+        idClassMapping.put(
+                PRODUCER_DTO_CLASS,
+                com.rj.payment_service.dto.request.CheckoutSessionRequestDTO.class
+        );
+
+        // You might need to map the nested class too if the producer is sending type info for it
+        // (Depends on how Jackson handles nested records with NON_FINAL)
+        idClassMapping.put(
+                PRODUCER_DTO_CLASS + "$CheckoutLineItemDTO", // Producer Nested
+                com.rj.payment_service.dto.request.CheckoutSessionRequestDTO.CheckoutLineItemDTO.class
+        );
+
+        typeMapper.setIdClassMapping(idClassMapping);
+
+        // *** CORRECTED Trusted Packages ***
+        // Add the producer's package name here accurately
+        final String PRODUCER_DTO_PACKAGE = "com.rj.ecommerce_backend.messaging.payment.dto";
+
+        typeMapper.addTrustedPackages(
+                PRODUCER_DTO_PACKAGE,                             // Producer's package
+                "com.rj.payment_service.dto.request",           // Consumer's package
+                "java.util",
+                "java.time"
+        );
+        converter.setClassMapper(typeMapper);
+        return converter;
+    }
+
 }
